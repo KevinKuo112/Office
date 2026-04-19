@@ -11,12 +11,10 @@
         .toast-exit { animation: slideOutDown 0.3s ease-in forwards; }
         @keyframes slideInUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes slideOutDown { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
-        .pulse-ring { position: absolute; top: -8px; right: -8px; }
         .tab-active { @apply bg-indigo-100 text-indigo-700; }
         .tab-inactive { @apply text-gray-600 hover:bg-gray-100 hover:text-gray-900; }
         .modal-enter { animation: fadeIn 0.2s ease-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        
         pre::-webkit-scrollbar { height: 8px; width: 8px; }
         pre::-webkit-scrollbar-track { background: #1f2937; }
         pre::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
@@ -35,6 +33,310 @@
                     <span id="modeBadge" class="ml-3 px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
                         本機模式
                     </span>
+                </div>
+                
+                <div class="flex space-x-1 sm:space-x-2 items-center overflow-x-auto" id="navTabs">
+                    <button data-tab="overview" class="tab-btn tab-active flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-calendar-blank mr-1.5 text-lg"></i><span class="hidden md:inline">今日總覽</span>
+                    </button>
+                    <button data-tab="history" class="tab-btn tab-inactive flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-clock-counter-clockwise mr-1.5 text-lg"></i><span class="hidden md:inline">歷史紀錄</span>
+                    </button>
+                    <button data-tab="users" class="tab-btn tab-inactive flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-users mr-1.5 text-lg"></i><span class="hidden lg:inline">人員管理</span>
+                    </button>
+                    <button data-tab="locations" class="tab-btn tab-inactive flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-map-trifold mr-1.5 text-lg"></i><span class="hidden lg:inline">地點管理</span>
+                    </button>
+                    <button id="setupTabBtn" data-tab="setup" class="tab-btn tab-inactive items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 hidden">
+                        <i class="ph ph-database mr-1.5 text-lg"></i><span class="hidden lg:inline">資料庫設定</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="mainContent">
+        
+        <!-- Loading State -->
+        <div id="loadingState" class="flex flex-col justify-center items-center h-64 text-gray-500">
+            <i class="ph ph-spinner animate-spin text-4xl mb-4 text-indigo-500"></i> 
+            <span id="loadingText">載入中...</span>
+        </div>
+
+        <!-- 1. Overview Tab -->
+        <div id="tab-overview" class="tab-content hidden space-y-6">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="ph-fill ph-calendar text-indigo-500 mr-2 text-2xl"></i>
+                        今日總覽 <span id="overviewDateDisplay" class="ml-2 text-lg text-indigo-700 bg-indigo-50 px-2 py-1 rounded"></span>
+                    </h2>
+                    <p class="text-gray-500 mt-1">點擊卡片上的編輯按鈕即可更新人員目前所在位置。</p>
+                </div>
+                <div class="mt-4 lg:mt-0 flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full lg:w-auto">
+                    <button onclick="fetchDataFromGoogle()" id="refreshBtn" class="flex items-center text-sm text-gray-500 hover:text-indigo-600 bg-gray-50 px-3 py-1.5 rounded-md transition border border-gray-200 hidden whitespace-nowrap">
+                        <i class="ph ph-arrows-clockwise mr-1"></i> 強制重新整理
+                    </button>
+                    <div id="overviewStats" class="flex gap-2 flex-wrap lg:justify-end w-full"></div>
+                </div>
+            </div>
+            <div id="overviewGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- 2. History Tab -->
+        <div id="tab-history" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="text-2xl font-bold text-gray-900 flex items-center mb-4">
+                    <i class="ph-fill ph-clock text-indigo-500 mr-2 text-2xl"></i>
+                    歷史紀錄查詢
+                </h2>
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center space-x-2">
+                        <label class="font-medium text-gray-700">選擇日期：</label>
+                        <input type="date" id="historyDateInput" class="border-gray-300 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 px-4 py-2" />
+                    </div>
+                    <button id="btnToday" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium px-3 py-2 bg-indigo-50 rounded-md">回到今日</button>
+                    <span id="historyDayDisplay" class="text-gray-500 font-medium ml-2"></span>
+                </div>
+            </div>
+            <div id="historyGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- 3. Users Tab -->
+        <div id="tab-users" class="tab-content hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="ph-fill ph-users text-indigo-500 mr-2 text-2xl"></i>人員管理
+                    </h2>
+                    <button onclick="window.openUserModal('')" class="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition whitespace-nowrap">
+                        <i class="ph ph-plus mr-1"></i> 新增人員
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">編號</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">狀態</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3.5 Locations Tab -->
+        <div id="tab-locations" class="tab-content hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="ph-fill ph-map-trifold text-indigo-500 mr-2 text-2xl"></i>地點管理
+                    </h2>
+                    <button onclick="window.openLocationModal('')" class="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition whitespace-nowrap">
+                        <i class="ph ph-plus mr-1"></i> 新增地點
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">排序</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地點名稱</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">顏色標籤</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locationsTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Setup Tab -->
+        <div id="tab-setup" class="tab-content hidden space-y-6">
+            <div class="bg-gradient-to-br from-emerald-50 to-teal-50 p-6 rounded-xl shadow-sm border border-emerald-100 relative">
+                <button onclick="switchTab('overview')" class="absolute top-4 right-4 text-emerald-600 hover:text-emerald-800 bg-emerald-100 px-3 py-1 rounded-md text-sm font-bold flex items-center">
+                    <i class="ph ph-eye-closed mr-1"></i> 隱藏設定
+                </button>
+                <h2 class="text-2xl font-bold text-emerald-900 mb-2">資料庫連線設定</h2>
+                
+                <div class="bg-white p-4 rounded-lg border border-red-200 mt-4 text-sm text-gray-700">
+                    <p class="font-bold text-red-600 mb-1"><i class="ph-fill ph-warning mr-1"></i> 資料同步失敗？教你一招解決！</p>
+                    <p>如果發現「修改後重整資料就不見」，代表雲端沒有更新。請重新覆蓋下方的程式碼到 Apps Script，並嚴格執行以下部署步驟：</p>
+                    <ol class="list-decimal pl-5 mt-2 font-bold text-gray-900 space-y-1">
+                        <li>覆蓋下方最新程式碼並儲存(💾)。</li>
+                        <li>點擊「部署」 > 「管理部署作業」 > 點擊編輯(✏️)。</li>
+                        <li class="text-red-600">版本下拉選單，一定要選擇「建立新版本」！(非常重要)</li>
+                        <li>執行身分選「我」，誰可以存取選「所有人」。</li>
+                    </ol>
+                </div>
+
+                <div class="bg-white p-5 rounded-lg shadow-sm border border-emerald-200 mt-4">
+                    <label class="block text-sm font-bold text-gray-700 mb-2 font-mono">Google Apps Script URL:</label>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="gasUrlInput" class="flex-1 border-gray-300 rounded-md p-3 border font-mono text-sm bg-gray-50">
+                        <button onclick="saveGasUrl()" class="bg-emerald-600 text-white px-6 py-3 rounded-md font-medium hover:bg-emerald-700 transition shadow-sm whitespace-nowrap">儲存並連線</button>
+                    </div>
+                    <div class="mt-3 flex items-center justify-between text-sm">
+                        <span id="connStatus" class="text-gray-500"></span>
+                        <button onclick="clearGasUrl()" class="text-red-500 hover:text-red-700 underline font-medium">斷開連線 (恢復本機模式)</button>
+                    </div>
+                </div>
+
+                <!-- Apps Script Code -->
+                <div class="bg-white p-4 rounded-lg border border-emerald-200 mt-4">
+                    <p class="font-bold text-emerald-800 mb-2">最新加強版 Google Apps Script 程式碼：</p>
+                    <div class="relative group">
+                        <button onclick="copyCode()" class="absolute top-2 right-2 bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-1 rounded shadow transition z-10">複製程式碼</button>
+                        <pre class="bg-gray-900 text-green-400 p-4 rounded-md overflow-x-auto text-xs font-mono h-64 relative" id="gasCodeBlock">
+const USERS_SHEET = "Users";
+const STATUS_SHEET = "Statuses";
+const LOCATIONS_SHEET = "Locations";
+
+function getBoundSpreadsheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error("找不到綁定的試算表");
+  return ss;
+}
+
+function setup() {
+  const ss = getBoundSpreadsheet();
+  
+  if (!ss.getSheetByName(USERS_SHEET)) {
+    let uSheet = ss.insertSheet(USERS_SHEET);
+    uSheet.appendRow(["id", "empId", "name", "isActive"]);
+    for(let i=1; i<=12; i++) uSheet.appendRow(["emp_"+i, "E"+String(i).padStart(3,'0'), "人員 "+i, true]);
+  }
+  
+  if (!ss.getSheetByName(STATUS_SHEET)) {
+    let sSheet = ss.insertSheet(STATUS_SHEET);
+    sSheet.appendRow(["docId", "userId", "date", "location", "customLocation", "updatedAt"]);
+  }
+
+  if (!ss.getSheetByName(LOCATIONS_SHEET)) {
+    let lSheet = ss.insertSheet(LOCATIONS_SHEET);
+    lSheet.appendRow(["id", "label", "sortOrder", "color"]);
+    const defaultLocs = [
+        { id: 'OCC', label: 'OCC (辦公室)', color: 'bg-green-100 text-green-800 border-green-200', sortOrder: 10 },
+        { id: 'Home', label: '居家辦公', color: 'bg-blue-100 text-blue-800 border-blue-200', sortOrder: 20 },
+        { id: 'Client', label: '外出開會/公差', color: 'bg-purple-100 text-purple-800 border-purple-200', sortOrder: 30 },
+        { id: 'Leave', label: '請假', color: 'bg-red-100 text-red-800 border-red-200', sortOrder: 40 },
+        { id: 'Daliao', label: '大寮機廠訓練教室', color: 'bg-teal-100 text-teal-800 border-teal-200', sortOrder: 50 },
+        { id: 'South', label: '南機廠辦公室', color: 'bg-cyan-100 text-cyan-800 border-cyan-200', sortOrder: 60 },
+        { id: 'Formosa', label: '美麗島', color: 'bg-pink-100 text-pink-800 border-pink-200', sortOrder: 70 },
+        { id: 'A61', label: 'A61會議室', color: 'bg-indigo-100 text-indigo-800 border-indigo-200', sortOrder: 80 },
+        { id: 'A51', label: 'A51會議室', color: 'bg-indigo-100 text-indigo-800 border-indigo-200', sortOrder: 90 },
+        { id: 'LOCC', label: 'LOCC', color: 'bg-lime-100 text-lime-800 border-lime-200', sortOrder: 100 },
+        { id: 'OCC_Room', label: 'OCC一樓簡報室', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', sortOrder: 110 }
+    ];
+    defaultLocs.forEach(l => lSheet.appendRow([l.id, l.label, l.sortOrder, l.color]));
+  }
+}
+
+function doGet(e) {
+  try {
+    const ss = getBoundSpreadsheet();
+    const res = { users: [], statuses: [], locations: [] };
+    
+    ['Users', 'Statuses', 'Locations'].forEach(sheetName => {
+      const sheet = ss.getSheetByName(sheetName);
+      if (sheet) {
+        const data = sheet.getDataRange().getValues();
+        if (data.length > 1) {
+          const headers = data[0];
+          for (let i = 1; i < data.length; i++) {
+            let obj = {};
+            for (let j = 0; j < headers.length; j++) obj[headers[j]] = data[i][j];
+            res[sheetName.toLowerCase()].push(obj);
+          }
+        }
+      }
+    });
+    return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
+  } catch (error) { return ContentService.createTextOutput(JSON.stringify({ error: error.message })).setMimeType(ContentService.MimeType.JSON); }
+}
+
+function doPost(e) {
+  try {
+    const ss = getBoundSpreadsheet();
+    let payloadStr = "";
+    
+    // 強化的防呆接收機制
+    if (e.parameter && e.parameter.payload) {
+      payloadStr = e.parameter.payload;
+    } else if (e.postData && e.postData.contents) {
+      payloadStr = e.postData.contents;
+    }
+    
+    if(!payloadStr) throw new Error("No valid data received");
+    
+    const payload = JSON.parse(payloadStr);
+    
+    if (payload.action === "updateStatus") {
+      const sheet = ss.getSheetByName(STATUS_SHEET);
+      const data = payload.data;
+      const docId = data.date + "_" + data.userId;
+      const rows = sheet.getDataRange().getValues();
+      let found = false;
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === docId) {
+          sheet.getRange(i + 1, 2, 1, 5).setValues([[data.userId, data.date, data.location, data.customLocation, data.updatedAt]]);
+          found = true; break;
+        }
+      }
+      if (!found) sheet.appendRow([docId, data.userId, data.date, data.location, data.customLocation, data.updatedAt]);
+    } else if (payload.action === "updateUser") {
+      const sheet = ss.getSheetByName(USERS_SHEET);
+      const data = payload.data;
+      const rows = sheet.getDataRange().getValues();
+      let found = false;
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          sheet.getRange(i + 1, 2, 1, 3).setValues([[data.empId, data.name, data.isActive]]);
+          found = true; break;
+        }
+      }
+      if (!found) sheet.appendRow([data.id, data.empId, data.name, data.isActive]);
+    } else if (payload.action === "updateLocation") {
+      const sheet = ss.getSheetByName(LOCATIONS_SHEET);
+      const data = payload.data;
+      const rows = sheet.getDataRange().getValues();
+      let found = false;
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          sheet.getRange(i + 1, 2, 1, 3).setValues([[data.label, data.sortOrder, data.color]]);
+          found = true; break;
+        }
+      }
+      if (!found) sheet.appendRow([data.id, data.label, data.sortOrder, data.color]);
+    } else if (payload.action === "deleteLocation") {
+      const sheet = ss.getSheetByName(LOCATIONS_SHEET);
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === payload.id) { sheet.deleteRow(i + 1); break; }
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+  } catch (error) { return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.message })).setMimeType(ContentService.MimeType.JSON); }
+}
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Edit Status -->
+    <div id="statusModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal-enter">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+            <div class="bg-indigo-50 px-6 py-4 border-b border-indigo-100 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-indigo-900" id="statusModalT                    </span>
                 </div>
                 
                 <div class="flex space-x-1 sm:space-x-2 items-center overflow-x-auto" id="navTabs">
