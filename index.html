@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>辦公地點登錄系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        .toast-enter { animation: slideInUp 0.3s ease-out forwards; }
+        .toast-exit { animation: slideOutDown 0.3s ease-in forwards; }
+        @keyframes slideInUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideOutDown { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
+        .pulse-ring { position: absolute; top: -8px; right: -8px; }
+        .tab-active { @apply bg-indigo-100 text-indigo-700; }
+        .tab-inactive { @apply text-gray-600 hover:bg-gray-100 hover:text-gray-900; }
+        .modal-enter { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        pre::-webkit-scrollbar { height: 8px; width: 8px; }
+        pre::-webkit-scrollbar-track { background: #1f2937; }
+        pre::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen">
+
+    <!-- Navbar -->
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10 select-none">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <!-- Title (The Secret Button) -->
+                <div class="flex items-center cursor-pointer" id="secretTitleBtn" title="連續點擊 5 次開啟隱藏設定">
+                    <i class="ph ph-map-pin-line text-2xl text-indigo-600 mr-2"></i>
+                    <span class="font-bold text-xl text-gray-900 tracking-tight hidden sm:inline">辦公地點登錄</span>
+                    <span id="modeBadge" class="ml-3 px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                        本機模式
+                    </span>
+                </div>
+                
+                <div class="flex space-x-1 sm:space-x-2 items-center overflow-x-auto" id="navTabs">
+                    <button data-tab="overview" class="tab-btn tab-active flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-calendar-blank mr-1.5 text-lg"></i><span class="hidden md:inline">今日總覽</span>
+                    </button>
+                    <button data-tab="history" class="tab-btn tab-inactive flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-clock-counter-clockwise mr-1.5 text-lg"></i><span class="hidden md:inline">歷史紀錄</span>
+                    </button>
+                    <button data-tab="users" class="tab-btn tab-inactive flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-users mr-1.5 text-lg"></i><span class="hidden lg:inline">人員管理</span>
+                    </button>
+                    <button data-tab="locations" class="tab-btn tab-inactive flex items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap">
+                        <i class="ph ph-map-trifold mr-1.5 text-lg"></i><span class="hidden lg:inline">地點管理</span>
+                    </button>
+                    <button id="setupTabBtn" data-tab="setup" class="tab-btn tab-inactive items-center px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 hidden">
+                        <i class="ph ph-database mr-1.5 text-lg"></i><span class="hidden lg:inline">資料庫設定</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="mainContent">
+        
+        <!-- Loading State -->
+        <div id="loadingState" class="flex flex-col justify-center items-center h-64 text-gray-500">
+            <i class="ph ph-spinner animate-spin text-4xl mb-4 text-indigo-500"></i> 
+            <span id="loadingText">載入中...</span>
+        </div>
+
+        <!-- 1. Overview Tab -->
+        <div id="tab-overview" class="tab-content hidden space-y-6">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="ph-fill ph-calendar text-indigo-500 mr-2 text-2xl"></i>
+                        今日總覽 <span id="overviewDateDisplay" class="ml-2 text-lg text-indigo-700 bg-indigo-50 px-2 py-1 rounded"></span>
+                    </h2>
+                    <p class="text-gray-500 mt-1">點擊卡片上的編輯按鈕即可更新人員目前所在位置。</p>
+                </div>
+                <div class="mt-4 lg:mt-0 flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full lg:w-auto">
+                    <button onclick="fetchDataFromGoogle()" id="refreshBtn" class="flex items-center text-sm text-gray-500 hover:text-indigo-600 bg-gray-50 px-3 py-1.5 rounded-md transition border border-gray-200 hidden whitespace-nowrap">
+                        <i class="ph ph-arrows-clockwise mr-1"></i> 重新整理
+                    </button>
+                    <div id="overviewStats" class="flex gap-2 flex-wrap lg:justify-end w-full"></div>
+                </div>
+            </div>
+            <div id="overviewGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- 2. History Tab -->
+        <div id="tab-history" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h2 class="text-2xl font-bold text-gray-900 flex items-center mb-4">
+                    <i class="ph-fill ph-clock text-indigo-500 mr-2 text-2xl"></i>
+                    歷史紀錄查詢
+                </h2>
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="flex items-center space-x-2">
+                        <label class="font-medium text-gray-700">選擇日期：</label>
+                        <input type="date" id="historyDateInput" class="border-gray-300 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 px-4 py-2" />
+                    </div>
+                    <button id="btnToday" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium px-3 py-2 bg-indigo-50 rounded-md">回到今日</button>
+                    <span id="historyDayDisplay" class="text-gray-500 font-medium ml-2"></span>
+                </div>
+            </div>
+            <div id="historyGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- 3. Users Tab -->
+        <div id="tab-users" class="tab-content hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="ph-fill ph-users text-indigo-500 mr-2 text-2xl"></i>人員管理
+                    </h2>
+                    <button onclick="window.openUserModal('')" class="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition whitespace-nowrap">
+                        <i class="ph ph-plus mr-1"></i> 新增人員
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">編號</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">狀態</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3.5 Locations Tab -->
+        <div id="tab-locations" class="tab-content hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="ph-fill ph-map-trifold text-indigo-500 mr-2 text-2xl"></i>地點管理
+                    </h2>
+                    <button onclick="window.openLocationModal('')" class="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition whitespace-nowrap">
+                        <i class="ph ph-plus mr-1"></i> 新增地點
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">排序</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地點名稱</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">顏色標籤</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="locationsTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Setup Tab -->
+        <div id="tab-setup" class="tab-content hidden space-y-6">
+            <div class="bg-gradient-to-br from-emerald-50 to-teal-50 p-6 rounded-xl shadow-sm border border-emerald-100 relative">
+                <button onclick="switchTab('overview')" class="absolute top-4 right-4 text-emerald-600 hover:text-emerald-800 bg-emerald-100 px-3 py-1 rounded-md text-sm font-bold flex items-center">
+                    <i class="ph ph-eye-closed mr-1"></i> 隱藏設定
+                </button>
+                <h2 class="text-2xl font-bold text-emerald-900 mb-2">資料庫連線設定</h2>
+                <div class="bg-white p-5 rounded-lg shadow-sm border border-emerald-200 mt-4">
+                    <label class="block text-sm font-bold text-gray-700 mb-2 font-mono">Google Apps Script URL:</label>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text" id="gasUrlInput" class="flex-1 border-gray-300 rounded-md p-3 border font-mono text-sm bg-gray-50">
+                        <button onclick="saveGasUrl()" class="bg-emerald-600 text-white px-6 py-3 rounded-md font-medium hover:bg-emerald-700 transition shadow-sm">儲存連線</button>
+                    </div>
+                    <div class="mt-3 flex items-center justify-between text-sm">
+                        <span id="connStatus" class="text-gray-500"></span>
+                        <button onclick="clearGasUrl()" class="text-red-500 hover:text-red-700 underline">斷開連線</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Edit Status -->
+    <div id="statusModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal-enter">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+            <div class="bg-indigo-50 px-6 py-4 border-b border-indigo-100 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-indigo-900" id="statusModalTitle">修改地點</h3>
+                <button onclick="window.closeModal('statusModal')" class="text-indigo-400 hover:text-indigo-700"><i class="ph ph-x text-xl"></i></button>
+            </div>
+            <form id="statusForm" class="p-6">
+                <input type="hidden" id="statusUserId">
+                <input type="hidden" id="statusDate">
+                <div class="mb-4 text-sm text-gray-500">日期：<span id="statusModalDateDisplay" class="font-semibold text-gray-700"></span></div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">請選擇目前所在辦公地點：</label>
+                    <select id="locationSelect" class="w-full border-gray-300 rounded-md p-3 border bg-white cursor-pointer" onchange="window.handleLocChange(this.value)"></select>
+                </div>
+                <div id="customLocContainer" class="mt-4 hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">請輸入地點說明</label>
+                    <input type="text" id="customLocInput" class="w-full border-gray-300 rounded-md p-2 border">
+                </div>
+                <div class="mt-8 flex justify-end space-x-3">
+                    <button type="button" onclick="window.closeModal('statusModal')" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium">取消</button>
+                    <button type="submit" id="statusSaveBtn" class="bg-indigo-600 text-white px-4 py-2 rounded-md shadow-sm text-sm font-medium">儲存變更</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: User -->
+    <div id="userModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal-enter">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 class="text-lg font-bold mb-4" id="userModalTitle">編輯人員</h3>
+            <form id="userForm" class="space-y-4">
+                <input type="hidden" id="editUserId">
+                <input type="text" id="editEmpId" required class="w-full border-gray-300 rounded-md p-2 border" placeholder="職工編號">
+                <input type="text" id="editUserName" required class="w-full border-gray-300 rounded-md p-2 border" placeholder="姓名">
+                <label class="flex items-center"><input type="checkbox" id="editUserActive" class="mr-2"> 帳號啟用中</label>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="window.closeModal('userModal')" class="px-4 py-2 border rounded-md">取消</button>
+                    <button type="submit" id="userSaveBtn" class="bg-indigo-600 text-white px-4 py-2 rounded-md">儲存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Location -->
+    <div id="locationModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 hidden modal-enter">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 class="text-lg font-bold mb-4" id="locationModalTitle">編輯地點</h3>
+            <form id="locationForm" class="space-y-4">
+                <input type="hidden" id="editLocId">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">地點名稱</label>
+                    <input type="text" id="editLocLabel" required class="w-full border-gray-300 rounded-md p-2 border" placeholder="地點名稱">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">排序權重 (數字越小越前面)</label>
+                    <input type="number" id="editLocOrder" required class="w-full border-gray-300 rounded-md p-2 border" value="100">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">顏色標籤設定</label>
+                    <div class="grid grid-cols-4 gap-2" id="colorPickerContainer"></div>
+                    <input type="hidden" id="editLocColor" required>
+                </div>
+                <div class="flex justify-between mt-6">
+                    <button type="button" id="btnDeleteLoc" onclick="window.deleteLocation()" class="text-red-600 hover:bg-red-50 px-3 py-2 rounded-md hidden">刪除</button>
+                    <div class="flex space-x-3 ml-auto">
+                        <button type="button" onclick="window.closeModal('locationModal')" class="px-4 py-2 border rounded-md">取消</button>
+                        <button type="submit" id="locSaveBtn" class="bg-indigo-600 text-white px-4 py-2 rounded-md">儲存</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script>
+        // --- Utils ---
+        const getLocalDateString = (dateObj = new Date()) => {
+            const offset = dateObj.getTimezoneOffset() * 60000;
+            return (new Date(dateObj.getTime() - offset)).toISOString().slice(0, 10);
+        };
+        const getDayOfWeek = (dateStr) => {
+            const days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            return days[new Date(dateStr).getDay()];
+        };
+        const formatDisplayDate = (dateStr) => `${dateStr} (${getDayOfWeek(dateStr)})`;
+        const todayStr = getLocalDateString();
+
+        // --- State ---
+        const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycby-Vj7AqXtxI4iAR1D4PNl2_ZHFMIO3XV3wkCrUe_wzM-r207wRfrnzcrc-CQw5BgAg/exec';
+        let savedUrl = localStorage.getItem('google_sheet_url');
+        let gasUrl = savedUrl === 'OFFLINE' ? '' : (savedUrl || DEFAULT_GAS_URL);
+        let isCloudMode = !!gasUrl;
+        
+        let usersList = [];
+        let statusesList = [];
+        let locationsList = [];
+        let isInitialLoad = true;
+
+        const DEFAULT_LOCATIONS = [
+            { id: 'OCC', label: 'OCC (辦公室)', color: 'bg-green-100 text-green-800 border-green-200', sortOrder: 10 },
+            { id: 'Home', label: '居家辦公', color: 'bg-blue-100 text-blue-800 border-blue-200', sortOrder: 20 },
+            { id: 'Client', label: '外出開會/公差', color: 'bg-purple-100 text-purple-800 border-purple-200', sortOrder: 30 },
+            { id: 'Leave', label: '請假', color: 'bg-red-100 text-red-800 border-red-200', sortOrder: 40 }
+        ];
+
+        const COLOR_PALETTES = [
+            'bg-gray-100 text-gray-800 border-gray-200', 'bg-red-100 text-red-800 border-red-200',
+            'bg-orange-100 text-orange-800 border-orange-200', 'bg-amber-100 text-amber-800 border-amber-200',
+            'bg-green-100 text-green-800 border-green-200', 'bg-emerald-100 text-emerald-800 border-emerald-200',
+            'bg-teal-100 text-teal-800 border-teal-200', 'bg-cyan-100 text-cyan-800 border-cyan-200',
+            'bg-blue-100 text-blue-800 border-blue-200', 'bg-indigo-100 text-indigo-800 border-indigo-200',
+            'bg-purple-100 text-purple-800 border-purple-200', 'bg-pink-100 text-pink-800 border-pink-200'
+        ];
+
+        // --- Core Functions ---
+        async function fetchDataFromGoogle() {
+            if (!gasUrl) return;
+            const btn = document.getElementById('refreshBtn');
+            if(btn) btn.innerHTML = '<i class="ph ph-spinner animate-spin mr-1"></i> 更新中...';
+            try {
+                const response = await fetch(gasUrl, { redirect: 'follow' });
+                const result = await response.json();
+                usersList = (result.users || []).map(u => ({...u, isActive: String(u.isActive) !== 'false'}));
+                statusesList = result.statuses || [];
+                locationsList = (result.locations && result.locations.length > 0) ? result.locations : (JSON.parse(localStorage.getItem('local_locations')) || DEFAULT_LOCATIONS);
+                
+                // 處理舊資料沒有 sortOrder 的情況
+                locationsList = locationsList.map(l => ({ ...l, sortOrder: l.sortOrder !== undefined ? parseInt(l.sortOrder) : 100 }));
+                
+                if(!isInitialLoad) showToastNotification({message: '已同步最新資料'});
+                finishLoading();
+            } catch (error) {
+                showToastNotification({message: '連線失敗，改用本機模式'});
+                isCloudMode = false; loadLocalMockData(); updateModeUI();
+            } finally { if(btn) btn.innerHTML = '<i class="ph ph-arrows-clockwise mr-1"></i> 重新整理'; }
+        }
+
+        async function postDataToGoogle(action, data) {
+            if (!gasUrl) return false;
+            try {
+                const response = await fetch(gasUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({ action, data, id: data?.id }),
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    redirect: 'follow'
+                });
+                return (await response.json()).success;
+            } catch (e) { return false; }
+        }
+
+        function finishLoading() {
+            document.getElementById('loadingState').classList.add('hidden');
+            if (isInitialLoad) { isInitialLoad = false; document.getElementById('tab-overview').classList.remove('hidden'); }
+            renderAll();
+        }
+
+        function loadLocalMockData() {
+            usersList = JSON.parse(localStorage.getItem('local_users')) || Array.from({ length: 12 }, (_, i) => ({ id: `emp_${i + 1}`, name: `人員 ${i + 1}`, empId: `E${String(i + 1).padStart(3, '0')}`, isActive: true }));
+            statusesList = JSON.parse(localStorage.getItem('local_statuses')) || [];
+            locationsList = JSON.parse(localStorage.getItem('local_locations')) || DEFAULT_LOCATIONS;
+            finishLoading();
+        }
+
+        function saveLocalData() {
+            localStorage.setItem('local_users', JSON.stringify(usersList));
+            localStorage.setItem('local_statuses', JSON.stringify(statusesList));
+            localStorage.setItem('local_locations', JSON.stringify(locationsList));
+        }
+
+        function renderAll() {
+            // 在渲染前，先對地點清單進行排序
+            locationsList.sort((a, b) => (a.sortOrder || 100) - (b.sortOrder || 100));
+            renderOverview(); renderHistory(); renderUsersTable(); renderLocationsTable();
+        }
+
+        function renderOverview() {
+            document.getElementById('overviewDateDisplay').textContent = formatDisplayDate(todayStr);
+            const grid = document.getElementById('overviewGrid');
+            const activeUsers = usersList.filter(u => u.isActive);
+            grid.innerHTML = activeUsers.map(u => buildUserCardHTML(u, getStatus(u.id, todayStr), todayStr, true)).join('');
+            
+            const stats = {};
+            activeUsers.forEach(u => { const loc = getStatus(u.id, todayStr).location; stats[loc] = (stats[loc] || 0) + 1; });
+            const allLocs = [...locationsList, {id:'Other', label:'其他'}];
+            document.getElementById('overviewStats').innerHTML = Object.entries(stats).map(([id, count]) => {
+                const l = allLocs.find(o => o.id === id) || {label: '?', color: 'bg-gray-100'};
+                return `<div class="px-3 py-1 ${l.color} rounded-full text-sm font-medium border shadow-sm">${l.label}: ${count}</div>`;
+            }).join('');
+        }
+
+        function buildUserCardHTML(user, status, date, showTime) {
+            const allLocs = [...locationsList, {id:'Other', label:'其他', color:'bg-orange-100 text-orange-800 border-orange-200'}];
+            const loc = allLocs.find(o => o.id === status.location) || {label:'未知', color:'bg-gray-100'};
+            const displayLoc = status.location === 'Other' ? status.customLocation : loc.label;
+            const isRecent = status.updatedAt && (Date.now() - status.updatedAt < 3600000);
+            return `
+                <div class="bg-white rounded-xl border p-5 shadow-sm relative group hover:shadow-md transition-shadow ${isRecent && showTime ? 'ring-2 ring-indigo-200' : 'border-gray-200'}">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <div class="text-xs text-gray-500 font-mono">${user.empId}</div>
+                            <h3 class="text-lg font-bold text-gray-900 flex items-center"><i class="ph-fill ph-user-circle text-indigo-400 mr-1.5 text-xl"></i>${user.name}</h3>
+                        </div>
+                        <button onclick="window.openStatusModal('${user.id}', '${date}')" class="text-gray-400 hover:text-indigo-600 bg-gray-50 p-2 rounded-md border border-gray-100 transition"><i class="ph ph-pencil-simple text-lg"></i></button>
+                    </div>
+                    <div class="mt-2 px-3 py-2.5 rounded-lg border flex items-center justify-center text-center font-medium ${loc.color}">
+                        <i class="ph-fill ph-map-pin mr-1.5 opacity-70"></i> ${displayLoc || '未設定'}
+                    </div>
+                </div>`;
+        }
+
+        function renderHistory() {
+            const dateInput = document.getElementById('historyDateInput').value || todayStr;
+            document.getElementById('historyDayDisplay').textContent = getDayOfWeek(dateInput);
+            document.getElementById('historyGrid').innerHTML = usersList.filter(u => u.isActive).map(u => buildUserCardHTML(u, getStatus(u.id, dateInput), dateInput, false)).join('');
+        }
+
+        function renderUsersTable() {
+            document.getElementById('usersTableBody').innerHTML = usersList.map(u => `
+                <tr class="hover:bg-indigo-50/30 border-b">
+                    <td class="px-6 py-4 font-mono">${u.empId}</td>
+                    <td class="px-6 py-4 font-bold">${u.name}</td>
+                    <td class="px-6 py-4">${u.isActive ? '啟用' : '停用'}</td>
+                    <td class="px-6 py-4 text-right"><button onclick="window.openUserModal('${encodeURIComponent(JSON.stringify(u))}')" class="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-md">編輯</button></td>
+                </tr>`).join('');
+        }
+
+        function renderLocationsTable() {
+            // 這裡的地點清單在 renderAll 已排過序
+            document.getElementById('locationsTableBody').innerHTML = locationsList.map(loc => `
+                <tr class="hover:bg-indigo-50/30 border-b">
+                    <td class="px-6 py-4 font-mono text-gray-400">${loc.sortOrder || 100}</td>
+                    <td class="px-6 py-4 font-bold">${loc.label}</td>
+                    <td class="px-6 py-4"><span class="px-3 py-1 rounded border ${loc.color}">預覽</span></td>
+                    <td class="px-6 py-4 text-right"><button onclick="window.openLocationModal('${encodeURIComponent(JSON.stringify(loc))}')" class="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-md">編輯</button></td>
+                </tr>`).join('');
+        }
+
+        function getStatus(userId, date) {
+            return statusesList.find(s => s.userId === userId && s.date === date) || {location:'OCC', customLocation:'', isDefault:true};
+        }
+
+        // --- Window Bindings ---
+        window.switchTab = function(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.replace('tab-active', 'tab-inactive'));
+            const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
+            if(activeBtn) activeBtn.classList.replace('tab-inactive', 'tab-active');
+            if(tabId === 'history' && !document.getElementById('historyDateInput').value) { document.getElementById('historyDateInput').value = todayStr; renderHistory(); }
+        };
+
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+
+        window.openStatusModal = (userId, date) => {
+            const user = usersList.find(u => u.id === userId);
+            const status = getStatus(userId, date);
+            document.getElementById('statusUserId').value = userId;
+            document.getElementById('statusDate').value = date;
+            document.getElementById('statusModalTitle').textContent = `修改 ${user.name} 的地點`;
+            document.getElementById('statusModalDateDisplay').textContent = formatDisplayDate(date);
+            
+            // 下拉選單依排序呈現
+            const sortedLocs = [...locationsList].sort((a, b) => (a.sortOrder || 100) - (b.sortOrder || 100));
+            document.getElementById('locationSelect').innerHTML = [...sortedLocs, {id:'Other', label:'其他 (自填)'}].map(l => `<option value="${l.id}">${l.label}</option>`).join('');
+            document.getElementById('locationSelect').value = status.location;
+            window.handleLocChange(status.location);
+            document.getElementById('customLocInput').value = status.customLocation || '';
+            document.getElementById('statusModal').classList.remove('hidden');
+        };
+
+        window.handleLocChange = (val) => { document.getElementById('customLocContainer').classList.toggle('hidden', val !== 'Other'); };
+
+        window.openLocationModal = (json) => {
+            const isNew = !json;
+            if (isNew) {
+                document.getElementById('editLocId').value = `loc_${Date.now()}`;
+                document.getElementById('editLocLabel').value = '';
+                document.getElementById('editLocOrder').value = '100';
+                document.getElementById('editLocColor').value = COLOR_PALETTES[0];
+                document.getElementById('btnDeleteLoc').classList.add('hidden');
+            } else {
+                const loc = JSON.parse(decodeURIComponent(json));
+                document.getElementById('editLocId').value = loc.id;
+                document.getElementById('editLocLabel').value = loc.label;
+                document.getElementById('editLocOrder').value = loc.sortOrder || 100;
+                document.getElementById('editLocColor').value = loc.color;
+                document.getElementById('btnDeleteLoc').classList.toggle('hidden', loc.id === 'OCC');
+            }
+            renderColorPicker();
+            document.getElementById('locationModal').classList.remove('hidden');
+        };
+
+        function renderColorPicker() {
+            const selected = document.getElementById('editLocColor').value;
+            document.getElementById('colorPickerContainer').innerHTML = COLOR_PALETTES.map(c => `
+                <div onclick="document.getElementById('editLocColor').value='${c}'; renderColorPicker()" class="h-8 rounded cursor-pointer border-2 ${c.split(' ')[0]} ${selected === c ? 'border-black' : 'border-transparent'}"></div>
+            `).join('');
+        }
+
+        window.deleteLocation = async function() {
+            if(!confirm("確定刪除此地點？")) return;
+            const btn = document.getElementById('btnDeleteLoc');
+            btn.disabled = true; btn.innerHTML = '刪除中...';
+            const id = document.getElementById('editLocId').value;
+            locationsList = locationsList.filter(l => l.id !== id);
+            if(isCloudMode) await postDataToGoogle("deleteLocation", { id: id });
+            saveLocalData(); renderAll(); window.closeModal('locationModal');
+            btn.disabled = false; btn.innerHTML = '刪除';
+        };
+
+        window.openUserModal = (json) => {
+            const user = JSON.parse(decodeURIComponent(json));
+            document.getElementById('editUserId').value = user.id;
+            document.getElementById('editEmpId').value = user.empId;
+            document.getElementById('editUserName').value = user.name;
+            document.getElementById('editUserActive').checked = user.isActive;
+            document.getElementById('userModal').classList.remove('hidden');
+        };
+
+        window.saveGasUrl = async function() {
+            const url = document.getElementById('gasUrlInput').value.trim();
+            localStorage.setItem('google_sheet_url', url);
+            gasUrl = url; isCloudMode = !!url;
+            await fetchDataFromGoogle(); updateModeUI(); switchTab('overview');
+        };
+
+        window.clearGasUrl = () => { localStorage.setItem('google_sheet_url', 'OFFLINE'); location.reload(); };
+
+        function updateModeUI() {
+            const badge = document.getElementById('modeBadge');
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (isCloudMode) {
+                badge.className = "ml-3 px-2 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800";
+                badge.innerHTML = '雲端同步中';
+                refreshBtn.classList.remove('hidden');
+            } else {
+                badge.className = "ml-3 px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800";
+                badge.innerHTML = '本機模式';
+                refreshBtn.classList.add('hidden');
+            }
+        }
+
+        async function initSystem() {
+            updateModeUI();
+            if (isCloudMode) await fetchDataFromGoogle(); else loadLocalMockData();
+            
+            let clicks = 0; let timer;
+            document.getElementById('secretTitleBtn').onclick = () => {
+                clicks++; clearTimeout(timer); timer = setTimeout(() => clicks = 0, 3000);
+                if (clicks >= 5) {
+                    document.getElementById('setupTabBtn').classList.remove('hidden');
+                    switchTab('setup'); clicks = 0;
+                }
+            };
+        }
+
+        // Listeners
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.onclick = (e) => switchTab(e.currentTarget.dataset.tab));
+        document.getElementById('statusForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('statusSaveBtn'); btn.disabled = true;
+            const data = { 
+                userId: document.getElementById('statusUserId').value,
+                date: document.getElementById('statusDate').value,
+                location: document.getElementById('locationSelect').value,
+                customLocation: document.getElementById('customLocInput').value,
+                updatedAt: Date.now()
+            };
+            const idx = statusesList.findIndex(s => s.userId === data.userId && s.date === data.date);
+            if(idx >= 0) statusesList[idx] = data; else statusesList.push(data);
+            if(isCloudMode) await postDataToGoogle("updateStatus", data);
+            saveLocalData(); renderAll(); window.closeModal('statusModal'); btn.disabled = false;
+        };
+
+        document.getElementById('locationForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const data = { 
+                id: document.getElementById('editLocId').value, 
+                label: document.getElementById('editLocLabel').value, 
+                sortOrder: parseInt(document.getElementById('editLocOrder').value) || 100,
+                color: document.getElementById('editLocColor').value 
+            };
+            const idx = locationsList.findIndex(l => l.id === data.id);
+            if(idx >= 0) locationsList[idx] = data; else locationsList.push(data);
+            if(isCloudMode) await postDataToGoogle("updateLocation", data);
+            saveLocalData(); renderAll(); window.closeModal('locationModal');
+        };
+
+        document.getElementById('userForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const data = { id: document.getElementById('editUserId').value, empId: document.getElementById('editEmpId').value, name: document.getElementById('editUserName').value, isActive: document.getElementById('editUserActive').checked };
+            const idx = usersList.findIndex(u => u.id === data.id);
+            if(idx >= 0) usersList[idx] = data; else usersList.push(data);
+            if(isCloudMode) await postDataToGoogle("updateUser", data);
+            saveLocalData(); renderAll(); window.closeModal('userModal');
+        };
+
+        function showToastNotification(info) {
+            const t = document.createElement('div');
+            t.className = 'bg-gray-900 text-white px-4 py-2 rounded shadow-lg toast-enter z-[100]';
+            t.textContent = info.message;
+            document.getElementById('toastContainer').appendChild(t);
+            setTimeout(() => { t.classList.replace('toast-enter', 'toast-exit'); setTimeout(() => t.remove(), 300); }, 3000);
+        }
+
+        initSystem();
+    </script>
+</body>
+</html>
